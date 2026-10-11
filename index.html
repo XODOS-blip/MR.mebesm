@@ -84,6 +84,16 @@ progress{width:100%;height:10px;display:none}
     <button id="mAdd">Publicar mod</button>
   </section>
 
+  <section class="panel show" id="cfPanel">
+    <h3>Buscar en CurseForge</h3>
+    <div style="display:flex;gap:6px">
+      <input id="cfQ" placeholder="Nombre del mod (inicia sesión para buscar)" style="margin:0">
+      <button id="cfGo">Buscar</button>
+    </div>
+    <div class="n" style="margin:6px 0"><label><input type="checkbox" id="cfBed" style="width:auto;margin:0 4px 0 0">Bedrock</label></div>
+    <div class="grid" id="cfRes"></div>
+  </section>
+
   <h3>Mods</h3>
   <div class="grid" id="grid"></div>
 </main>
@@ -282,6 +292,26 @@ $("mAdd").onclick = async () => {
   } catch (e) { if (e) alert(e); }
   btn.disabled = false; $("prog").style.display = "none";
 };
+
+async function cfSearch() {
+  const box = $("cfRes"), q = $("cfQ").value.trim();
+  if (!q) return;
+  box.innerHTML = '<div class="empty">Buscando...</div>';
+  try {
+    const r = await fetch(API() + "/api/curseforge?q=" + encodeURIComponent(q) + "&g=" + ($("cfBed").checked ? "bedrock" : "java"),
+      { headers: tok() ? { Authorization: "Bearer " + tok() } : {} });
+    const d = await r.json();
+    if (!r.ok) { box.innerHTML = '<div class="empty">' + esc(d.error || "Error") + "</div>"; return; }
+    box.innerHTML = d.results.length ? d.results.map(m => `<div class="card">
+      <img class="th" src="${esc(m.img || "portada.png")}" alt="">
+      <div class="b"><h3>${esc(m.name)}</h3><p>${esc(m.summary || "")}</p>
+      <div class="n">por ${esc(m.author)} · ${Number(m.downloads).toLocaleString()} descargas</div>
+      <a href="${esc(m.url)}" target="_blank" rel="noopener"><img class="dl" src="descargar.png" alt="Ver en CurseForge"></a></div></div>`).join("")
+      : '<div class="empty">Sin resultados</div>';
+  } catch { box.innerHTML = '<div class="empty">No se pudo conectar</div>'; }
+}
+$("cfGo").onclick = cfSearch;
+$("cfQ").onkeydown = e => { if (e.key === "Enter") cfSearch(); };
 
 async function init() {
   try {

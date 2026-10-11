@@ -7,7 +7,7 @@
 <link rel="icon" href="portada.png">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
-:root{--bg:#0f1020;--card:#1a1b33;--tx:#f2f2fa;--mut:#9a9cc0;--ac:#7c4dff;--ac2:#00b0ff}
+:root{--bg:#0f1020;--card:#1a1b33;--tx:#f2f2fa;--mut:#9a9cc0;--ac:#7c4dff}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--tx)}
 header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:8px 14px;background:#14152b;border-bottom:1px solid #2a2c50}
@@ -20,17 +20,17 @@ button.sec{background:#2a2c50}
 .hero h2{margin:8px 0 2px}.hero p{margin:0;color:var(--mut)}
 .acts{display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0}
 .acts img{height:44px;cursor:pointer}
-.acts img.on{filter:drop-shadow(0 0 6px #4af)}
+.on{filter:drop-shadow(0 0 6px #4af)}
 .paypal{background:#ffc439;color:#111;font-weight:700}
 main{max-width:1000px;margin:auto;padding:14px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .card{background:var(--card);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
 .card .th{width:100%;aspect-ratio:16/10;object-fit:cover;background:#2a2c50}
 .card .b{padding:8px;display:flex;flex-direction:column;gap:4px;flex:1}
-.card h3{font-size:14px;margin:0}.card p{font-size:12px;color:var(--mut);margin:0;flex:1}
-.card .row{display:flex;align-items:center;justify-content:space-between;gap:4px}
+.card h3{font-size:14px;margin:0;word-break:break-word}.card p{font-size:12px;color:var(--mut);margin:0;flex:1}
+.row{display:flex;align-items:center;justify-content:space-between;gap:4px}
 .card .row img{height:22px;cursor:pointer}
-.card .dl{height:30px;cursor:pointer}
+.card .dl{height:30px!important}
 .n{font-size:12px;color:var(--mut)}
 .del{background:#c62828;padding:3px 8px;font-size:12px}
 .panel{display:none;background:var(--card);border-radius:12px;padding:14px;margin-bottom:16px}
@@ -40,6 +40,8 @@ input,textarea{width:100%;padding:8px;margin:4px 0 8px;border-radius:8px;border:
 .empty{color:var(--mut);text-align:center;padding:30px}
 #user{display:flex;align-items:center;gap:6px;font-size:13px}
 #user img{width:28px;height:28px;border-radius:50%}
+progress{width:100%;height:10px;display:none}
+.hint{font-size:12px;color:var(--mut);margin:0 0 8px}
 </style>
 </head>
 <body>
@@ -64,15 +66,17 @@ input,textarea{width:100%;padding:8px;margin:4px 0 8px;border-radius:8px;border:
   <section class="panel" id="adminPanel">
     <h3>Administradores</h3>
     <div class="tags" id="adminList"></div>
-    <div id="addAdmin">
-      <input id="newAdmin" placeholder="Nombre o correo del nuevo administrador">
-      <button id="addAdminBtn">Añadir administrador</button>
-    </div>
+    <input id="newAdmin" placeholder="Correo del nuevo administrador">
+    <button id="addAdminBtn">Añadir administrador</button>
     <hr style="border-color:#2a2c50;margin:14px 0">
     <h3>Subir mod</h3>
     <input id="mName" placeholder="Nombre del mod">
     <textarea id="mDesc" rows="2" placeholder="Descripción corta"></textarea>
-    <input id="mLink" placeholder="Enlace de descarga (https://...)">
+    <label class="n">Archivo del mod</label>
+    <input id="mFile" type="file">
+    <p class="hint" id="fileHint"></p>
+    <progress id="prog" max="100" value="0"></progress>
+    <input id="mLink" placeholder="O enlace de descarga (https://...) si no subes archivo">
     <label class="n">Foto de portada del mod</label>
     <input id="mImg" type="file" accept="image/*">
     <img id="mPrev" alt="" style="display:none;width:140px;aspect-ratio:16/10;object-fit:cover;border-radius:8px;margin:0 0 8px">
@@ -88,86 +92,118 @@ input,textarea{width:100%;padding:8px;margin:4px 0 8px;border-radius:8px;border:
 // ===== CONFIGURACIÓN =====
 const CONFIG = {
   GOOGLE_CLIENT_ID: "1095820230293-64gv3cn8itq84k6hge9niu334e0mk757.apps.googleusercontent.com",
-  PAYPAL_URL: "https://www.paypal.me/TU_USUARIO", // cambia por tu enlace de PayPal
-  ADMINS: ["Raulersito", "parrraul400@gmail.com"]                // primer administrador
+  PAYPAL_URL: "https://www.paypal.me/TU_USUARIO",   // cambia por tu enlace de PayPal
+  ADMINS: ["Raulersito", "parrraul400@gmail.com"],  // administradores (modo sin servidor)
+  API_URL: ""   // "" = el servidor es esta misma dirección. Si la página está en GitHub, pon aquí la dirección https de tu server.py
 };
 // =========================
 const $ = id => document.getElementById(id);
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { alert("Sin espacio: usa una imagen más pequeña.") } };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const API = () => CONFIG.API_URL.replace(/\/$/, "");
+const tok = () => load("mb_tok", null);
 
 let user = load("mb_user", null);
-let admins = load("mb_admins", CONFIG.ADMINS);
-CONFIG.ADMINS.forEach(a => { if (!admins.includes(a)) admins.push(a); });
-let mods = load("mb_mods", []);
-let subs = load("mb_subs", []);       // ids de usuarios suscritos
-let likes = load("mb_likes", {});     // clave: "canal" o id de mod -> lista de usuarios
-
+let server = false;
+let L = { mods: load("mb_mods", []), admins: load("mb_admins", CONFIG.ADMINS), subs: load("mb_subs", []), likes: load("mb_likes", {}) };
+CONFIG.ADMINS.forEach(a => { if (!L.admins.includes(a)) L.admins.push(a); });
+let S = { mods: [], admins: [], sub: { n: 0, me: false }, likes: {}, admin: false };
 const uid = () => user ? (user.email || user.name) : null;
-const isAdmin = () => user && admins.some(a => a.toLowerCase() === (user.name||"").toLowerCase() || a.toLowerCase() === (user.email||"").toLowerCase());
-const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
+function localSync() {
+  const me = uid(), lk = {};
+  for (const k in L.likes) lk[k] = { n: L.likes[k].length, me: !!me && L.likes[k].includes(me) };
+  const adm = !!user && L.admins.some(a => [user.name, user.email].filter(Boolean).some(x => x.toLowerCase() === a.toLowerCase()));
+  S = { mods: L.mods, admins: L.admins, sub: { n: L.subs.length, me: !!me && L.subs.includes(me) }, likes: lk, admin: adm };
+}
+async function call(path, body, method = "POST") {
+  const h = { "Content-Type": "application/json" };
+  if (tok()) h.Authorization = "Bearer " + tok();
+  const r = await fetch(API() + path, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { logout(); alert("Inicia sesión con Google."); throw 0; }
+  if (!r.ok) { alert(j.error || "Error del servidor"); throw 0; }
+  return j;
+}
+async function refresh() {
+  if (server) {
+    try { S = await call("/api/data", null, "GET"); } catch { return; }
+    if (tok() && !S.auth) { user = null; localStorage.removeItem("mb_user"); localStorage.removeItem("mb_tok"); }
+  } else localSync();
+  render();
+}
+function logout() { user = null; localStorage.removeItem("mb_user"); localStorage.removeItem("mb_tok"); refresh(); }
 function need() { if (!user) { alert("Inicia sesión con Google primero."); return false } return true }
-function toggleLike(key) {
+const flip = (arr, v) => { const i = arr.indexOf(v); i < 0 ? arr.push(v) : arr.splice(i, 1); };
+
+async function toggleLike(key) {
   if (!need()) return;
-  const l = likes[key] || [];
-  const i = l.indexOf(uid());
-  i < 0 ? l.push(uid()) : l.splice(i, 1);
-  likes[key] = l; save("mb_likes", likes); render();
+  if (server) await call("/api/like", { key });
+  else { L.likes[key] = L.likes[key] || []; flip(L.likes[key], uid()); save("mb_likes", L.likes); }
+  refresh();
+}
+async function toggleSub() {
+  if (!need()) return;
+  if (server) await call("/api/sub", {});
+  else { flip(L.subs, uid()); save("mb_subs", L.subs); }
+  refresh();
 }
 
+let lastK = null;
 function renderAuth() {
+  const k = (user ? uid() : "") + "|" + (window.google && google.accounts ? 1 : 0) + "|" + S.admin;
+  if (k === lastK) return; lastK = k;
   const a = $("auth");
   if (user) {
-    a.innerHTML = `<div id="user">${user.pic ? `<img src="${esc(user.pic)}">` : ""}<span>${esc(user.name)}${isAdmin() ? " ⭐" : ""}</span><button class="sec" id="out">Salir</button></div>`;
-    $("out").onclick = () => { user = null; localStorage.removeItem("mb_user"); render(); };
+    a.innerHTML = `<div id="user">${user.pic ? `<img src="${esc(user.pic)}">` : ""}<span>${esc(user.name)}${S.admin ? " ⭐" : ""}</span><button class="sec" id="out">Salir</button></div>`;
+    $("out").onclick = logout;
   } else {
     a.innerHTML = `<div id="gbtn"></div>`;
     if (CONFIG.GOOGLE_CLIENT_ID && window.google && google.accounts) {
       google.accounts.id.initialize({ client_id: CONFIG.GOOGLE_CLIENT_ID, callback: r => {
-        const p = JSON.parse(decodeURIComponent(escape(atob(r.credential.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")))));
+        const p = JSON.parse(decodeURIComponent(escape(atob(r.credential.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")))));
         user = { name: p.name, email: p.email, pic: p.picture };
-        save("mb_user", user); render();
+        save("mb_user", user); save("mb_tok", r.credential); refresh();
       }});
       google.accounts.id.renderButton($("gbtn"), { theme: "filled_blue", text: "signin_with", size: "medium" });
     } else {
-      // Modo prueba (sin Client ID o sin internet)
       $("gbtn").innerHTML = `<button id="demo">Iniciar sesión con Google</button>`;
       $("demo").onclick = () => {
-        if (CONFIG.GOOGLE_CLIENT_ID) { alert("No se pudo cargar Google. Revisa tu conexión."); return; }
-        const n = prompt("Modo prueba (falta GOOGLE_CLIENT_ID). Escribe tu nombre:");
-        if (n) { user = { name: n.trim(), email: "" }; save("mb_user", user); render(); }
+        if (CONFIG.GOOGLE_CLIENT_ID) return alert("No se pudo cargar Google. Revisa tu conexión.");
+        const n = prompt("Modo prueba. Escribe tu nombre:");
+        if (n) { user = { name: n.trim(), email: "" }; save("mb_user", user); refresh(); }
       };
     }
   }
 }
 
+const dlHref = m => m.file ? API() + "/files/" + encodeURIComponent(m.file) : m.link;
+
 function render() {
   renderAuth();
-  const subOn = user && subs.includes(uid());
-  $("subBtn").className = subOn ? "on" : "";
-  $("subBtn").title = subOn ? "Suscrito" : "Suscríbete";
-  const cl = likes.canal || [];
-  $("likeBtn").className = user && cl.includes(uid()) ? "on" : "";
-  $("likeN").textContent = cl.length;
-  $("stats").textContent = `${subs.length} suscriptores · ${mods.length} mods`;
+  $("subBtn").className = S.sub.me ? "on" : "";
+  const cl = S.likes.canal || { n: 0, me: false };
+  $("likeBtn").className = cl.me ? "on" : "";
+  $("likeN").textContent = cl.n;
+  $("stats").textContent = `${S.sub.n} suscriptores · ${S.mods.length} mods`;
   $("paypal").href = CONFIG.PAYPAL_URL;
+  $("adminPanel").classList.toggle("show", !!S.admin);
+  $("adminList").innerHTML = S.admins.map(a => `<span>${esc(a)}</span>`).join("");
+  $("mFile").disabled = !server;
+  $("fileHint").textContent = server ? "Se sube a tu servidor (máx. 1 GB)." : "Para subir archivos abre la página desde tu servidor (python3 server.py). Mientras, usa un enlace.";
 
-  const ap = $("adminPanel");
-  ap.classList.toggle("show", !!isAdmin());
-  $("adminList").innerHTML = admins.map(a => `<span>${esc(a)}</span>`).join("");
-
-  $("grid").innerHTML = mods.length ? mods.map(m => {
-    const ml = likes[m.id] || [];
+  $("grid").innerHTML = S.mods.length ? S.mods.map(m => {
+    const ml = S.likes[m.id] || { n: 0, me: false };
     return `<div class="card">
       <img class="th" src="${m.img ? esc(m.img) : "portada.png"}" alt="">
       <div class="b"><h3>${esc(m.name)}</h3><p>${esc(m.desc)}</p>
         <div class="n">por ${esc(m.by)}</div>
         <div class="row">
-          <span><img src="like.png" data-like="${m.id}" class="${user && ml.includes(uid()) ? "on" : ""}"> <span class="n">${ml.length}</span></span>
-          <a href="${esc(m.link)}" target="_blank" rel="noopener"><img class="dl" src="descargar.png" alt="Descargar"></a>
+          <span><img src="like.png" data-like="${m.id}" class="${ml.me ? "on" : ""}"> <span class="n">${ml.n}</span></span>
+          <a href="${esc(dlHref(m))}" target="_blank" rel="noopener"><img class="dl" src="descargar.png" alt="Descargar"></a>
         </div>
-        ${isAdmin() ? `<div class="row"><button class="sec del" style="background:#2a2c50" data-cover="${m.id}">Portada</button><button class="del" data-del="${m.id}">Borrar</button></div>` : ""}
+        ${S.admin ? `<div class="row"><button class="del" style="background:#2a2c50" data-cover="${m.id}">Portada</button><button class="del" data-del="${m.id}">Borrar</button></div>` : ""}
       </div></div>`;
   }).join("") : `<div class="empty">Aún no hay mods. ¡Pronto habrá!</div>`;
 }
@@ -179,6 +215,21 @@ function readImg(f) {
     fr.readAsDataURL(f);
   });
 }
+function uploadFile(f) {
+  return new Promise((res, rej) => {
+    const x = new XMLHttpRequest(), p = $("prog");
+    x.open("POST", API() + "/api/upload?name=" + encodeURIComponent(f.name));
+    x.setRequestHeader("Authorization", "Bearer " + tok());
+    p.style.display = "block"; p.value = 0;
+    x.upload.onprogress = e => { if (e.lengthComputable) p.value = Math.round(e.loaded / e.total * 100); };
+    x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText) } catch {} x.status === 200 ? res(j.file) : rej(j.error || "Error " + x.status); };
+    x.onerror = () => rej("Falló la conexión con el servidor");
+    x.send(f);
+  });
+}
+
+$("subBtn").onclick = toggleSub;
+$("likeBtn").onclick = () => toggleLike("canal");
 $("mImg").onchange = async e => {
   const f = e.target.files[0], p = $("mPrev");
   if (f) { p.src = await readImg(f); p.style.display = "block"; } else p.style.display = "none";
@@ -186,44 +237,62 @@ $("mImg").onchange = async e => {
 let coverId = null;
 $("coverPick").onchange = async e => {
   const f = e.target.files[0];
-  if (!f || !coverId || !isAdmin()) return;
-  const m = mods.find(x => x.id === coverId);
-  if (m) { m.img = await readImg(f); save("mb_mods", mods); render(); }
-  e.target.value = "";
+  if (!f || !coverId || !S.admin) return;
+  const img = await readImg(f);
+  if (server) await call("/api/mod/cover", { id: coverId, img });
+  else { const m = L.mods.find(x => x.id === coverId); if (m) { m.img = img; save("mb_mods", L.mods); } }
+  e.target.value = ""; refresh();
 };
-$("subBtn").onclick = () => {
-  if (!need()) return;
-  const i = subs.indexOf(uid());
-  i < 0 ? subs.push(uid()) : subs.splice(i, 1);
-  save("mb_subs", subs); render();
-};
-$("likeBtn").onclick = () => toggleLike("canal");
-$("grid").onclick = e => {
+$("grid").onclick = async e => {
   const l = e.target.dataset.like, d = e.target.dataset.del, c = e.target.dataset.cover;
-  if (c && isAdmin()) { coverId = c; $("coverPick").click(); }
   if (l) toggleLike(l);
-  if (d && isAdmin() && confirm("¿Borrar este mod?")) { mods = mods.filter(m => m.id !== d); save("mb_mods", mods); render(); }
+  if (c && S.admin) { coverId = c; $("coverPick").click(); }
+  if (d && S.admin && confirm("¿Borrar este mod?")) {
+    if (server) await call("/api/mod/delete", { id: d });
+    else { L.mods = L.mods.filter(m => m.id !== d); save("mb_mods", L.mods); }
+    refresh();
+  }
 };
-$("addAdminBtn").onclick = () => {
+$("addAdminBtn").onclick = async () => {
   const v = $("newAdmin").value.trim();
-  if (!v || !isAdmin()) return;
-  if (!admins.includes(v)) admins.push(v);
-  save("mb_admins", admins); $("newAdmin").value = ""; render();
+  if (!v || !S.admin) return;
+  if (server) await call("/api/admin", { email: v });
+  else { if (!L.admins.includes(v)) L.admins.push(v); save("mb_admins", L.admins); }
+  $("newAdmin").value = ""; refresh();
 };
 $("mAdd").onclick = async () => {
-  if (!isAdmin()) return;
+  if (!S.admin) return;
   const name = $("mName").value.trim(), link = $("mLink").value.trim();
-  if (!name || !/^https?:\/\//i.test(link)) return alert("Pon un nombre y un enlace válido (https://...).");
-  const f = $("mImg").files[0];
-  const img = f ? await readImg(f) : "";
-  mods.unshift({ id: Date.now().toString(36), name, desc: $("mDesc").value.trim(), link, img, by: user.name });
-  save("mb_mods", mods);
-  ["mName", "mDesc", "mLink", "mImg"].forEach(i => $(i).value = "");
-  $("mPrev").style.display = "none";
-  render();
+  const f = $("mFile").files[0], cv = $("mImg").files[0];
+  if (!name) return alert("Pon el nombre del mod.");
+  if (!f && !/^https?:\/\//i.test(link)) return alert("Sube un archivo o pon un enlace válido (https://...).");
+  const img = cv ? await readImg(cv) : "";
+  const btn = $("mAdd"); btn.disabled = true;
+  try {
+    if (server) {
+      const file = f ? await uploadFile(f) : "";
+      await call("/api/mod", { name, desc: $("mDesc").value.trim(), link, file, img });
+    } else {
+      L.mods.unshift({ id: Date.now().toString(36), name, desc: $("mDesc").value.trim(), link, file: "", img, by: user.name });
+      save("mb_mods", L.mods);
+    }
+    ["mName", "mDesc", "mLink", "mImg", "mFile"].forEach(i => $(i).value = "");
+    $("mPrev").style.display = "none";
+    refresh();
+  } catch (e) { if (e) alert(e); }
+  btn.disabled = false; $("prog").style.display = "none";
 };
-window.addEventListener("load", () => setTimeout(render, 300));
+
+async function init() {
+  try {
+    const r = await fetch(API() + "/api/data", { headers: tok() ? { Authorization: "Bearer " + tok() } : {} });
+    const j = await r.json();
+    if (r.ok && Array.isArray(j.mods)) server = true;
+  } catch {}
+  refresh();
+}
 render();
+window.addEventListener("load", () => { init(); setTimeout(render, 500); });
 </script>
 </body>
 </html>

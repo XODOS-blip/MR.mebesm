@@ -73,8 +73,10 @@ input,textarea{width:100%;padding:8px;margin:4px 0 8px;border-radius:8px;border:
     <input id="mName" placeholder="Nombre del mod">
     <textarea id="mDesc" rows="2" placeholder="Descripción corta"></textarea>
     <input id="mLink" placeholder="Enlace de descarga (https://...)">
-    <label class="n">Imagen del mod (opcional)</label>
+    <label class="n">Foto de portada del mod</label>
     <input id="mImg" type="file" accept="image/*">
+    <img id="mPrev" alt="" style="display:none;width:140px;aspect-ratio:16/10;object-fit:cover;border-radius:8px;margin:0 0 8px">
+    <input id="coverPick" type="file" accept="image/*" hidden>
     <button id="mAdd">Publicar mod</button>
   </section>
 
@@ -165,11 +167,30 @@ function render() {
           <span><img src="like.png" data-like="${m.id}" class="${user && ml.includes(uid()) ? "on" : ""}"> <span class="n">${ml.length}</span></span>
           <a href="${esc(m.link)}" target="_blank" rel="noopener"><img class="dl" src="descargar.png" alt="Descargar"></a>
         </div>
-        ${isAdmin() ? `<button class="del" data-del="${m.id}">Borrar</button>` : ""}
+        ${isAdmin() ? `<div class="row"><button class="sec del" style="background:#2a2c50" data-cover="${m.id}">Portada</button><button class="del" data-del="${m.id}">Borrar</button></div>` : ""}
       </div></div>`;
   }).join("") : `<div class="empty">Aún no hay mods. ¡Pronto habrá!</div>`;
 }
 
+function readImg(f) {
+  return new Promise(r => {
+    const im = new Image(), fr = new FileReader();
+    fr.onload = () => { im.onload = () => { const c = document.createElement("canvas"); const s = Math.min(1, 320 / im.width); c.width = im.width * s; c.height = im.height * s; c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); r(c.toDataURL("image/jpeg", .7)); }; im.src = fr.result; };
+    fr.readAsDataURL(f);
+  });
+}
+$("mImg").onchange = async e => {
+  const f = e.target.files[0], p = $("mPrev");
+  if (f) { p.src = await readImg(f); p.style.display = "block"; } else p.style.display = "none";
+};
+let coverId = null;
+$("coverPick").onchange = async e => {
+  const f = e.target.files[0];
+  if (!f || !coverId || !isAdmin()) return;
+  const m = mods.find(x => x.id === coverId);
+  if (m) { m.img = await readImg(f); save("mb_mods", mods); render(); }
+  e.target.value = "";
+};
 $("subBtn").onclick = () => {
   if (!need()) return;
   const i = subs.indexOf(uid());
@@ -178,7 +199,8 @@ $("subBtn").onclick = () => {
 };
 $("likeBtn").onclick = () => toggleLike("canal");
 $("grid").onclick = e => {
-  const l = e.target.dataset.like, d = e.target.dataset.del;
+  const l = e.target.dataset.like, d = e.target.dataset.del, c = e.target.dataset.cover;
+  if (c && isAdmin()) { coverId = c; $("coverPick").click(); }
   if (l) toggleLike(l);
   if (d && isAdmin() && confirm("¿Borrar este mod?")) { mods = mods.filter(m => m.id !== d); save("mb_mods", mods); render(); }
 };
@@ -192,16 +214,12 @@ $("mAdd").onclick = async () => {
   if (!isAdmin()) return;
   const name = $("mName").value.trim(), link = $("mLink").value.trim();
   if (!name || !/^https?:\/\//i.test(link)) return alert("Pon un nombre y un enlace válido (https://...).");
-  let img = "";
   const f = $("mImg").files[0];
-  if (f) img = await new Promise(r => {
-    const im = new Image(), fr = new FileReader();
-    fr.onload = () => { im.onload = () => { const c = document.createElement("canvas"); const s = Math.min(1, 320 / im.width); c.width = im.width * s; c.height = im.height * s; c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); r(c.toDataURL("image/jpeg", .7)); }; im.src = fr.result; };
-    fr.readAsDataURL(f);
-  });
+  const img = f ? await readImg(f) : "";
   mods.unshift({ id: Date.now().toString(36), name, desc: $("mDesc").value.trim(), link, img, by: user.name });
   save("mb_mods", mods);
   ["mName", "mDesc", "mLink", "mImg"].forEach(i => $(i).value = "");
+  $("mPrev").style.display = "none";
   render();
 };
 window.addEventListener("load", () => setTimeout(render, 300));

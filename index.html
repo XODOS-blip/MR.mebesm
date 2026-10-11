@@ -285,6 +285,10 @@ $("mAdd").onclick = async () => {
 
 async function init() {
   try {
+    const c = await (await fetch("config.json?t=" + Date.now(), { cache: "no-store" })).json();
+    if (c && typeof c.api_url === "string" && c.api_url) CONFIG.API_URL = c.api_url;
+  } catch {}
+  try {
     const r = await fetch(API() + "/api/data", { headers: tok() ? { Authorization: "Bearer " + tok() } : {} });
     const j = await r.json();
     if (r.ok && Array.isArray(j.mods)) server = true;

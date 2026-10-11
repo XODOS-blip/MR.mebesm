@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesbems - Mods</title>
+<link rel="icon" href="portada.png">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root{--bg:#0f1020;--card:#1a1b33;--tx:#f2f2fa;--mut:#9a9cc0;--ac:#7c4dff;--ac2:#00b0ff}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:8px 14px;background:#14152b;border-bottom:1px solid #2a2c50}
+header .logo{width:40px;height:40px;border-radius:50%;object-fit:cover}
+header h1{font-size:18px;margin:0;flex:1}
+button,.btn{font:inherit;cursor:pointer;border:0;border-radius:8px;padding:8px 12px;background:var(--ac);color:#fff;text-decoration:none;display:inline-block}
+button.sec{background:#2a2c50}
+.hero{text-align:center;padding:24px 14px 10px;background:linear-gradient(135deg,#e5083a55,#7c4dff55,#00b0ff55)}
+.hero img.av{width:96px;height:96px;border-radius:50%;border:3px solid #fff;object-fit:cover}
+.hero h2{margin:8px 0 2px}.hero p{margin:0;color:var(--mut)}
+.acts{display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0}
+.acts img{height:44px;cursor:pointer}
+.acts img.on{filter:drop-shadow(0 0 6px #4af)}
+.paypal{background:#ffc439;color:#111;font-weight:700}
+main{max-width:1000px;margin:auto;padding:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.card{background:var(--card);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.card .th{width:100%;aspect-ratio:16/10;object-fit:cover;background:#2a2c50}
+.card .b{padding:8px;display:flex;flex-direction:column;gap:4px;flex:1}
+.card h3{font-size:14px;margin:0}.card p{font-size:12px;color:var(--mut);margin:0;flex:1}
+.card .row{display:flex;align-items:center;justify-content:space-between;gap:4px}
+.card .row img{height:22px;cursor:pointer}
+.card .dl{height:30px;cursor:pointer}
+.n{font-size:12px;color:var(--mut)}
+.del{background:#c62828;padding:3px 8px;font-size:12px}
+.panel{display:none;background:var(--card);border-radius:12px;padding:14px;margin-bottom:16px}
+.panel.show{display:block}
+input,textarea{width:100%;padding:8px;margin:4px 0 8px;border-radius:8px;border:1px solid #3a3c70;background:#10112a;color:var(--tx);font:inherit}
+.tags span{display:inline-block;background:#2a2c50;border-radius:20px;padding:3px 10px;margin:2px;font-size:13px}
+.empty{color:var(--mut);text-align:center;padding:30px}
+#user{display:flex;align-items:center;gap:6px;font-size:13px}
+#user img{width:28px;height:28px;border-radius:50%}
+</style>
+</head>
+<body>
+<header>
+  <img class="logo" src="portada.png" alt="Mesbems">
+  <h1>Mesbems</h1>
+  <div id="auth"></div>
+</header>
+
+<section class="hero">
+  <img class="av" src="portada.png" alt="Mebems">
+  <h2>Mebems</h2>
+  <p id="stats"></p>
+  <div class="acts">
+    <img id="subBtn" src="suscribete.png" alt="Suscríbete">
+    <span><img id="likeBtn" src="like.png" alt="Like" style="height:36px"> <b id="likeN">0</b></span>
+    <a class="btn paypal" id="paypal" target="_blank" rel="noopener">Apoyar con PayPal</a>
+  </div>
+</section>
+
+<main>
+  <section class="panel" id="adminPanel">
+    <h3>Administradores</h3>
+    <div class="tags" id="adminList"></div>
+    <div id="addAdmin">
+      <input id="newAdmin" placeholder="Nombre o correo del nuevo administrador">
+      <button id="addAdminBtn">Añadir administrador</button>
+    </div>
+    <hr style="border-color:#2a2c50;margin:14px 0">
+    <h3>Subir mod</h3>
+    <input id="mName" placeholder="Nombre del mod">
+    <textarea id="mDesc" rows="2" placeholder="Descripción corta"></textarea>
+    <input id="mLink" placeholder="Enlace de descarga (https://...)">
+    <label class="n">Imagen del mod (opcional)</label>
+    <input id="mImg" type="file" accept="image/*">
+    <button id="mAdd">Publicar mod</button>
+  </section>
+
+  <h3>Mods</h3>
+  <div class="grid" id="grid"></div>
+</main>
+
+<script>
+// ===== CONFIGURACIÓN =====
+const CONFIG = {
+  GOOGLE_CLIENT_ID: "1095820230293-64gv3cn8itq84k6hge9niu334e0mk757.apps.googleusercontent.com",
+  PAYPAL_URL: "https://www.paypal.me/TU_USUARIO", // cambia por tu enlace de PayPal
+  ADMINS: ["Raulersito"]                // primer administrador
+};
+// =========================
+const $ = id => document.getElementById(id);
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { alert("Sin espacio: usa una imagen más pequeña.") } };
+
+let user = load("mb_user", null);
+let admins = load("mb_admins", CONFIG.ADMINS);
+CONFIG.ADMINS.forEach(a => { if (!admins.includes(a)) admins.push(a); });
+let mods = load("mb_mods", []);
+let subs = load("mb_subs", []);       // ids de usuarios suscritos
+let likes = load("mb_likes", {});     // clave: "canal" o id de mod -> lista de usuarios
+
+const uid = () => user ? (user.email || user.name) : null;
+const isAdmin = () => user && admins.some(a => a.toLowerCase() === (user.name||"").toLowerCase() || a.toLowerCase() === (user.email||"").toLowerCase());
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function need() { if (!user) { alert("Inicia sesión con Google primero."); return false } return true }
+function toggleLike(key) {
+  if (!need()) return;
+  const l = likes[key] || [];
+  const i = l.indexOf(uid());
+  i < 0 ? l.push(uid()) : l.splice(i, 1);
+  likes[key] = l; save("mb_likes", likes); render();
+}
+
+function renderAuth() {
+  const a = $("auth");
+  if (user) {
+    a.innerHTML = `<div id="user">${user.pic ? `<img src="${esc(user.pic)}">` : ""}<span>${esc(user.name)}${isAdmin() ? " ⭐" : ""}</span><button class="sec" id="out">Salir</button></div>`;
+    $("out").onclick = () => { user = null; localStorage.removeItem("mb_user"); render(); };
+  } else {
+    a.innerHTML = `<div id="gbtn"></div>`;
+    if (CONFIG.GOOGLE_CLIENT_ID && window.google && google.accounts) {
+      google.accounts.id.initialize({ client_id: CONFIG.GOOGLE_CLIENT_ID, callback: r => {
+        const p = JSON.parse(decodeURIComponent(escape(atob(r.credential.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")))));
+        user = { name: p.name, email: p.email, pic: p.picture };
+        save("mb_user", user); render();
+      }});
+      google.accounts.id.renderButton($("gbtn"), { theme: "filled_blue", text: "signin_with", size: "medium" });
+    } else {
+      // Modo prueba (sin Client ID o sin internet)
+      $("gbtn").innerHTML = `<button id="demo">Iniciar sesión con Google</button>`;
+      $("demo").onclick = () => {
+        if (CONFIG.GOOGLE_CLIENT_ID) { alert("No se pudo cargar Google. Revisa tu conexión."); return; }
+        const n = prompt("Modo prueba (falta GOOGLE_CLIENT_ID). Escribe tu nombre:");
+        if (n) { user = { name: n.trim(), email: "" }; save("mb_user", user); render(); }
+      };
+    }
+  }
+}
+
+function render() {
+  renderAuth();
+  const subOn = user && subs.includes(uid());
+  $("subBtn").className = subOn ? "on" : "";
+  $("subBtn").title = subOn ? "Suscrito" : "Suscríbete";
+  const cl = likes.canal || [];
+  $("likeBtn").className = user && cl.includes(uid()) ? "on" : "";
+  $("likeN").textContent = cl.length;
+  $("stats").textContent = `${subs.length} suscriptores · ${mods.length} mods`;
+  $("paypal").href = CONFIG.PAYPAL_URL;
+
+  const ap = $("adminPanel");
+  ap.classList.toggle("show", !!isAdmin());
+  $("adminList").innerHTML = admins.map(a => `<span>${esc(a)}</span>`).join("");
+
+  $("grid").innerHTML = mods.length ? mods.map(m => {
+    const ml = likes[m.id] || [];
+    return `<div class="card">
+      <img class="th" src="${m.img ? esc(m.img) : "portada.png"}" alt="">
+      <div class="b"><h3>${esc(m.name)}</h3><p>${esc(m.desc)}</p>
+        <div class="n">por ${esc(m.by)}</div>
+        <div class="row">
+          <span><img src="like.png" data-like="${m.id}" class="${user && ml.includes(uid()) ? "on" : ""}"> <span class="n">${ml.length}</span></span>
+          <a href="${esc(m.link)}" target="_blank" rel="noopener"><img class="dl" src="descargar.png" alt="Descargar"></a>
+        </div>
+        ${isAdmin() ? `<button class="del" data-del="${m.id}">Borrar</button>` : ""}
+      </div></div>`;
+  }).join("") : `<div class="empty">Aún no hay mods. ¡Pronto habrá!</div>`;
+}
+
+$("subBtn").onclick = () => {
+  if (!need()) return;
+  const i = subs.indexOf(uid());
+  i < 0 ? subs.push(uid()) : subs.splice(i, 1);
+  save("mb_subs", subs); render();
+};
+$("likeBtn").onclick = () => toggleLike("canal");
+$("grid").onclick = e => {
+  const l = e.target.dataset.like, d = e.target.dataset.del;
+  if (l) toggleLike(l);
+  if (d && isAdmin() && confirm("¿Borrar este mod?")) { mods = mods.filter(m => m.id !== d); save("mb_mods", mods); render(); }
+};
+$("addAdminBtn").onclick = () => {
+  const v = $("newAdmin").value.trim();
+  if (!v || !isAdmin()) return;
+  if (!admins.includes(v)) admins.push(v);
+  save("mb_admins", admins); $("newAdmin").value = ""; render();
+};
+$("mAdd").onclick = async () => {
+  if (!isAdmin()) return;
+  const name = $("mName").value.trim(), link = $("mLink").value.trim();
+  if (!name || !/^https?:\/\//i.test(link)) return alert("Pon un nombre y un enlace válido (https://...).");
+  let img = "";
+  const f = $("mImg").files[0];
+  if (f) img = await new Promise(r => {
+    const im = new Image(), fr = new FileReader();
+    fr.onload = () => { im.onload = () => { const c = document.createElement("canvas"); const s = Math.min(1, 320 / im.width); c.width = im.width * s; c.height = im.height * s; c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); r(c.toDataURL("image/jpeg", .7)); }; im.src = fr.result; };
+    fr.readAsDataURL(f);
+  });
+  mods.unshift({ id: Date.now().toString(36), name, desc: $("mDesc").value.trim(), link, img, by: user.name });
+  save("mb_mods", mods);
+  ["mName", "mDesc", "mLink", "mImg"].forEach(i => $(i).value = "");
+  render();
+};
+window.addEventListener("load", () => setTimeout(render, 300));
+render();
+</script>
+</body>
+</html>
